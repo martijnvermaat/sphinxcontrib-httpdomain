@@ -66,12 +66,14 @@ def translate_werkzeug_rule(rule):
     return buf.getvalue()
 
 
-def get_routes(app):
-    for rule in app.url_map.iter_rules():
-        methods = rule.methods.difference(['OPTIONS', 'HEAD'])
-        for method in methods:
-            path = translate_werkzeug_rule(rule.rule)
-            yield method, path, rule.endpoint
+def get_routes(app, endpoints=None):
+    endpoints = endpoints or [None]
+    for endpoint in endpoints:
+        for rule in app.url_map.iter_rules(endpoint):
+            methods = rule.methods.difference(['OPTIONS', 'HEAD'])
+            for method in methods:
+                path = translate_werkzeug_rule(rule.rule)
+                yield method, path, rule.endpoint
 
 
 class AutoflaskDirective(Directive):
@@ -91,7 +93,7 @@ class AutoflaskDirective(Directive):
         except KeyError:
             # means 'endpoints' option was missing
             return None
-        return frozenset(endpoints)
+        return endpoints
 
     @property
     def undoc_endpoints(self):
@@ -111,7 +113,7 @@ class AutoflaskDirective(Directive):
 
     def make_rst(self):
         app = import_object(self.arguments[0])
-        for method, path, endpoint in get_routes(app):
+        for method, path, endpoint in get_routes(app, self.endpoints):
             try:
                 blueprint, endpoint_internal = endpoint.split('.')
                 if blueprint in self.undoc_blueprints:
@@ -119,8 +121,6 @@ class AutoflaskDirective(Directive):
             except ValueError:
                 pass  # endpoint is not within a blueprint
 
-            if self.endpoints and endpoint not in self.endpoints:
-                continue
             if endpoint in self.undoc_endpoints:
                 continue
             try:
@@ -155,4 +155,3 @@ def setup(app):
     if 'http' not in app.domains:
         httpdomain.setup(app)
     app.add_directive('autoflask', AutoflaskDirective)
-
